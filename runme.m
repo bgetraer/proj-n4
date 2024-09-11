@@ -1,20 +1,19 @@
 % Generate models of Amundsen Sea Embayment with variable n and different ISMIP6 forcing models for comparison
-%    adapted from code by Mathieu Morlighem and project for ears107 (fall 2022)
+%    originating from a course project for Dartmouth EARS107 (Fall 2022).
 %
 %    A single model is initialized using the n=3 assumptions to invert for B element-wise. After inverting for B and C,
 % the stress balance is solved to generate the initial model velocity field. We then diverge the models being tested, 
-% converting the B values for n=X such that the initial model velocity and viscocity fields are EXACTLY the same between 
+% converting the B values for n=4 such that the initial model velocity and viscocity fields are EXACTLY the same between 
 % the different models. 
 %    By default, atmospheric forcing is taken from RACMO and melting rates from Rignot et al. If ``useISMIP6'' is turned on,
-% these forcings are replaced by interpolations of the chosed ISMIP6 model. 
+% these forcings are replaced by interpolations of the chosen ISMIP6 model. 
 
 % SEE ALSO interpISMIP6AntarcticaOcn,  interpISMIP6AntarcticaSMB
-% Benjamin Getraer
 % Last Edited: 1/25/2024
 
-steps = [2];
+steps = [1];
 
-rheology_n=3;  % Glen's flow law exponent used for the model 
+rheology_n=3;  % Glen's flow law exponent used for this experiment
 useISMIP6=1;	% turn on ISMIP6 rcp 8.5 climate scenario? otherwise use RACMO
 % define ISMIP model {{{
 ISMIP6model.name='ipsl85';  % name of climate model
@@ -25,19 +24,19 @@ if useISMIP6
 			ISMIP6model.atmosmodelname='miroc-esm-chem_rcp8.5';
 		case 'noresm85'
 			ISMIP6model.oceanmodelname='noresm1-m_rcp8.5';
-         ISMIP6model.atmosmodelname='noresm1-m_rcp8.5';
+			ISMIP6model.atmosmodelname='noresm1-m_rcp8.5';
 		case 'ccsm85'
 			ISMIP6model.oceanmodelname='ccsm4_rcp8.5';
-         ISMIP6model.atmosmodelname='ccsm4_rcp8.5';
+			ISMIP6model.atmosmodelname='ccsm4_rcp8.5';
 		case 'hadgem85'
 			ISMIP6model.oceanmodelname='hadgem2-es_rcp8.5';
-         ISMIP6model.atmosmodelname='HadGEM2-ES_rcp85';
+			ISMIP6model.atmosmodelname='HadGEM2-ES_rcp85';
 		case 'csiro85'
 			ISMIP6model.oceanmodelname='csiro-mk3-6-0_rcp8.5';
-         ISMIP6model.atmosmodelname='CSIRO-Mk3-6-0_rcp85';
+			ISMIP6model.atmosmodelname='CSIRO-Mk3-6-0_rcp85';
 		case 'ipsl85'
 			ISMIP6model.oceanmodelname='ipsl-cm5a-mr_rcp8.5';
-         ISMIP6model.atmosmodelname='IPSL-CM5A-MR_rcp85';
+			ISMIP6model.atmosmodelname='IPSL-CM5A-MR_rcp85';
 		otherwise
 			error('ISMIP6 model name not supported')
 	end
@@ -47,25 +46,27 @@ else
 end
 % }}}
 
-%Cluster parameters{{{
+% cluster parameters{{{
 cluster=generic('name',oshostname(),'np',45); %for totten 45 ideal
 %}}}
-%Model naming scheme{{{ 
-prefix_initial = 'Amundsen_finedx'; %ie 'Amundsen_Mesh.mat'
+% model naming scheme{{{ 
+prefix_initial = 'Amundsen_'; %ie 'Amundsen_Mesh.mat'
 prefix_n = [prefix_initial 'n' num2str(rheology_n) '_']; %ie 'Amundsen_n4_TransientRun.mat'
 prefix_trans = [prefix_n ISMIP6model.prefix];
 %}}}
 
 org=organizer('repository',['./Models'],'prefix',prefix_initial,'steps',steps); clear steps;
 addpath([getenv('JPL_DIR') '/proj-morlighem/CODE/']);
+addpath('./m/');
 
 %Model initialization
 if perform(org,'Mesh'),% {{{
+	coarse = 15e3; % coarse areas of the mesh
+	fine_vel =1500; % fine areas of the mesh 
 
-	coarse=15e3;
-	fine_vel=1500;
-	md=triangle(model,['./Exp/ThwaitesPIGDomain2.exp'],5e3); % based on the Inversion Domain
+	md=triangle(model,'./Exp/ThwaitesPIGDomain2.exp',5e3); % generate initial triangular mesh
 
+	% Adapt mesh to initial observed velocities
 	nsteps = 2; % number of mesh adaptation steps
 	for i=1:nsteps, 
 		disp(['--- Performing static mesh adaptation. Step ' num2str(i) '/' num2str(nsteps)]);
@@ -89,31 +90,6 @@ if perform(org,'Mesh'),% {{{
 		md.private.bamg=struct();
 	end
 
-%	% refine mesh for end of simulation
-%	   load('Models/final_vel.mat','final_vel');
-%
-%		disp(['--- Performing static mesh adaptation. Step ' num2str(i) '/' num2str(nsteps)]);
-%      % using a priori analysis (observed velocity)
-%      disp('   -- Interpolating some data');
-%      [velx vely] = interpMouginotAnt2017(md.mesh.x,md.mesh.y);
-%      surface=interpBedmachineAntarctica(md.mesh.x,md.mesh.y,'surface');
-%      ocean_levelset=-ones(size(md.mesh.x));% all floating
-%      ocean_levelset(find(interpBedmachineAntarctica(md.mesh.x,md.mesh.y,'mask')==2))=1; % grounded from BedMachine
-%      ice_levelset=-ones(size(md.mesh.x));
-%      ice_levelset(find(interpBedmachineAntarctica(md.mesh.x,md.mesh.y,'mask')==0))=1; % grounded from BedMachine
-%
-%      pos=find(isnan(velx) | isnan(vely) | ice_levelset>0);% | ocean_levelset<0);
-%      velx(pos)=0; vely(pos)=0; vel=sqrt(velx.^2+vely.^2);
-%
-%      hVertices = NaN(md.mesh.numberofvertices,1);
-%      hVertices(find(vel>200)) = fine_vel;
-%		hVertices(find(final_vel>200)) = fine_vel;
-%      md=bamg(md,'gradation',1.6180,'anisomax',1.e6,'KeepVertices',0,'Hessiantype',0,'Metrictype',0,...
-%         'hmax',coarse,'hmin',fine_vel,'hVertices',hVertices,'field',vel,'err',3);
-%
-%      md.private.bamg=struct();
-
-
 	% mesh projection information
 	[md.mesh.lat,md.mesh.long]=xy2ll(md.mesh.x,md.mesh.y,-1);
 	md.mesh.epsg=3031;
@@ -129,14 +105,13 @@ if perform(org,'Param'),% {{{
 	disp('   Setting up materials');
 	disp('   -- Densities ');
 	md.materials.rho_water		= 1027.; % ocean water (1027 is the value used in BedMachine)
-	disp('   -- Creating flow law parameters (assume ice is at -10°C for now)');
-	md.materials.rheology_B		= cuffey(273.15 -10)*ones(md.mesh.numberofelements,1); %DO THIS ELEMENT WISE -benjy
-	md.materials.rheology_n		= 3*ones(md.mesh.numberofelements,1);
+	disp('   -- Creating flow law parameters (assume ice is at -10°C)');
+	md.materials.rheology_B		= cuffey(273.15 -10)*ones(md.mesh.numberofelements,1); % assign element-wise!!
+	md.materials.rheology_n		= 3*ones(md.mesh.numberofelements,1); % assign n_0=3
 
 	%Minimum values used in the parameterzation
 	min_thickness						= 1.; % minimum ice thickness used to setup the initial geometry
 	min_surface							= min_thickness*(1-md.materials.rho_ice/md.materials.rho_water) ;
-	%md.masstransport.min_thickness= min_thickness;
 
 	disp('   Initializing masks');
 	mask = interpBedmachineAntarctica(md.mesh.x,md.mesh.y,'mask'); % interp method: nearest
@@ -250,11 +225,11 @@ if perform(org,'Param'),% {{{
 
 	disp('   Setting up thermal model');
 	md.initialization.temperature		= min(0,interpSeaRISE(md.mesh.x,md.mesh.y,'temp',-1))+273.15;
-	md.initialization.waterfraction	= zeros(md.mesh.numberofvertices,1);
-	md.initialization.watercolumn		= zeros(md.mesh.numberofvertices,1);
-	md.thermal.spctemperature			= md.initialization.temperature;
-	md.thermal.isenthalpy				= 1;
-	md.thermal.isdynamicbasalspc		= 1;
+	%	md.initialization.waterfraction	= zeros(md.mesh.numberofvertices,1);
+	%	md.initialization.watercolumn		= zeros(md.mesh.numberofvertices,1);
+	%	md.thermal.spctemperature			= md.initialization.temperature;
+	%	md.thermal.isenthalpy				= 1;
+	%	md.thermal.isdynamicbasalspc		= 1;
 
 	disp('   Setting boundary conditions'); 
 	md.stressbalance.spcvx			= NaN(md.mesh.numberofvertices,1);
@@ -284,7 +259,7 @@ if perform(org,'InversionB'),% {{{
 	% Set inversion data
 	md.inversion.vx_obs=md.initialization.vx; % initialization was defined in last step (raw data, with NaN)
 	md.inversion.vy_obs=md.initialization.vy; % initialization was defined in last step (raw data, with NaN)
-   %Fill in blanks in velocity data
+	%Fill in blanks in velocity data
 	pos=find(isnan(md.inversion.vx_obs) | isnan(md.inversion.vy_obs));
 	md.inversion.vx_obs(pos)=0;
 	md.inversion.vy_obs(pos)=0;
@@ -433,18 +408,18 @@ if perform(org,'InversionC'),% {{{
 
 	% Get the modeled velocity field that N3 and N4 models have in common	
 	md.inversion.iscontrol=0;
-   md.verbose.convergence = 1;
-   md = solve(md,'sb');
+	md.verbose.convergence = 1;
+	md = solve(md,'sb');
 	% Update velocity field
 	md.initialization.vx= md.results.StressbalanceSolution.Vx;
-   md.initialization.vy=md.results.StressbalanceSolution.Vy;
-   md.initialization.vel=md.results.StressbalanceSolution.Vel;
+	md.initialization.vy=md.results.StressbalanceSolution.Vy;
+	md.initialization.vel=md.results.StressbalanceSolution.Vel;
 
 	savemodel(org,md);
 end%}}}
 if perform(org,'ConvertN'), % {{{
 	md=loadmodel(org,'InversionC');  
-	
+
 	% extract B from the existing model (calculated for n=3)
 	B3 = md.materials.rheology_B;
 	% calculate effective strain rate from the MODELED velocities, do NOT average over the elements
@@ -453,7 +428,7 @@ if perform(org,'ConvertN'), % {{{
 	% calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
 	disp(['Converting B for n=' num2str(rheology_n)]);
 	Bn = B3.*(strainrate.eff/md.constants.yts).^((rheology_n-1)/rheology_n - 2.0/3.0);
-	
+
 	% update with new parameters for n for all ice vertices
 	ind=strainrate.eff>0; % index the ice, not the ocean, ignore zero strainrate
 	md.materials.rheology_B(ind)=Bn(ind); % update B
@@ -531,11 +506,11 @@ if perform(org,'TransientPrep'),% {{{
 	% }}}
 
 	org.prefix=prefix_trans;
-   savemodel(org,md);
+	savemodel(org,md);
 end%}}}
 if perform(org,'TransientRun'),% {{{
 	org.prefix=prefix_trans;
-   %md=loadmodel(org,'TransientPrep');
+	%md=loadmodel(org,'TransientPrep');
 	md_coarse=loadmodel('Models/Amundsen_n4_hadgem85_TransientPrep.mat');
 	md_fine=loadmodel('Models/Amundsen_n4_hadgem85_TransientPrep.mat');
 
@@ -551,7 +526,7 @@ end%}}}
 if perform(org,'PickupTransient'), % {{{
 	org.prefix=prefix_trans;
 	md=loadmodel(org,'TransientRun');
-	
+
 	% retain previous transient solution
 	lasttransientsolution=md.results.TransientSolution;
 
@@ -563,16 +538,16 @@ if perform(org,'PickupTransient'), % {{{
 	disp(['restarting run at t=' num2str(md.timestepping.start_time)]);
 
 	% reinitialize
-   md.geometry.base = md.results.TransientSolution(end).Base;
-   md.geometry.thickness = md.results.TransientSolution(end).Thickness;
-   md.geometry.surface = md.results.TransientSolution(end).Surface;
-   % reset the masks
-   md.mask.ocean_levelset = md.results.TransientSolution(end).MaskOceanLevelset;
-   % reset the initialization
-   md.initialization.vx = md.results.TransientSolution(end).Vx;
-   md.initialization.vy = md.results.TransientSolution(end).Vy;
-   md.initialization.vel = md.results.TransientSolution(end).Vel;
-   md.initialization.pressure = md.results.TransientSolution(end).Pressure;
+	md.geometry.base = md.results.TransientSolution(end).Base;
+	md.geometry.thickness = md.results.TransientSolution(end).Thickness;
+	md.geometry.surface = md.results.TransientSolution(end).Surface;
+	% reset the masks
+	md.mask.ocean_levelset = md.results.TransientSolution(end).MaskOceanLevelset;
+	% reset the initialization
+	md.initialization.vx = md.results.TransientSolution(end).Vx;
+	md.initialization.vy = md.results.TransientSolution(end).Vy;
+	md.initialization.vel = md.results.TransientSolution(end).Vel;
+	md.initialization.pressure = md.results.TransientSolution(end).Pressure;
 
 	md.miscellaneous.name = [org.prefix org.steps(org.currentstep).string];
 	md.cluster=cluster;
@@ -585,10 +560,10 @@ if perform(org,'PickupTransient'), % {{{
 	savemodel(org,md);
 end % }}}
 
-
+% OTHER TESTING 
 if perform(org,'PerturbN_baseline'), % {{{
 	md=loadmodel('Models/Amundsen_n3_ccsm85_TransientPrep');
-	
+
 	% run for 20 years
 	md.settings.output_frequency=10;
 	md.timestepping=timesteppingadaptive();
@@ -598,31 +573,31 @@ if perform(org,'PerturbN_baseline'), % {{{
 	md.timestepping.final_time=15;
 
 	% SOLVE
-   md.miscellaneous.name = org.steps(org.currentstep).string;
-   md.cluster = cluster;
-   loadonly=0;
-   md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
+	md.miscellaneous.name = org.steps(org.currentstep).string;
+	md.cluster = cluster;
+	loadonly=0;
+	md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
 
-   savemodel(org,md);
+	savemodel(org,md);
 end % }}}
 if perform(org,'PerturbN_gradmin'), % {{{
 	md=loadmodel('Models/Amundsen_n3_ccsm85_TransientPrep');
 	gradN=getfield(load('Models/gradient.mat'),'gradient');
 
 	% extract B from the existing model (calculated for n=3)
-   B3 = md.materials.rheology_B;
-   % calculate effective strain rate from the MODELED velocities, do NOT average over the elements
-   [strainrate] = strainrate_SSA(md,md.results.StressbalanceSolution.Vx, md.results.StressbalanceSolution.Vy,0);
+	B3 = md.materials.rheology_B;
+	% calculate effective strain rate from the MODELED velocities, do NOT average over the elements
+	[strainrate] = strainrate_SSA(md,md.results.StressbalanceSolution.Vx, md.results.StressbalanceSolution.Vy,0);
 
-   % calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
-   disp('Converting B for n=4');
-   B4 = B3.*(strainrate.eff/md.constants.yts).^((4.0-1)/4.0 - 2.0/3.0);
+	% calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
+	disp('Converting B for n=4');
+	B4 = B3.*(strainrate.eff/md.constants.yts).^((4.0-1)/4.0 - 2.0/3.0);
 
-   % update with new parameters for n for all ice vertices
-   ind=gradN<prctile(gradN,1); % target the most negative values of gradient (lower than 1st percentile)
-   md.materials.rheology_B(ind)=B4(ind); % update B only for the target elements
-   md.materials.rheology_n(ind)=4; % set n=4 for the target elements
-	
+	% update with new parameters for n for all ice vertices
+	ind=gradN<prctile(gradN,1); % target the most negative values of gradient (lower than 1st percentile)
+	md.materials.rheology_B(ind)=B4(ind); % update B only for the target elements
+	md.materials.rheology_n(ind)=4; % set n=4 for the target elements
+
 	% run for 20 years
 	md.settings.output_frequency=10;
 	md.timestepping=timesteppingadaptive();
@@ -632,12 +607,12 @@ if perform(org,'PerturbN_gradmin'), % {{{
 	md.timestepping.final_time=15;
 
 	% SOLVE
-   md.miscellaneous.name = org.steps(org.currentstep).string;
-   md.cluster = cluster;
-   loadonly=0;
-   md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
+	md.miscellaneous.name = org.steps(org.currentstep).string;
+	md.cluster = cluster;
+	loadonly=0;
+	md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
 
-   savemodel(org,md);
+	savemodel(org,md);
 
 	t=cell2mat({md.results.TransientSolution.time});
 	vaf=cell2mat({md.results.TransientSolution.IceVolumeAboveFloatation});
@@ -648,19 +623,19 @@ if perform(org,'PerturbN_gradmax'), % {{{
 	gradN=getfield(load('Models/gradient.mat'),'gradient');
 
 	% extract B from the existing model (calculated for n=3)
-   B3 = md.materials.rheology_B;
-   % calculate effective strain rate from the MODELED velocities, do NOT average over the elements
-   [strainrate] = strainrate_SSA(md,md.results.StressbalanceSolution.Vx, md.results.StressbalanceSolution.Vy,0);
+	B3 = md.materials.rheology_B;
+	% calculate effective strain rate from the MODELED velocities, do NOT average over the elements
+	[strainrate] = strainrate_SSA(md,md.results.StressbalanceSolution.Vx, md.results.StressbalanceSolution.Vy,0);
 
-   % calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
-   disp('Converting B for n=4');
-   B4 = B3.*(strainrate.eff/md.constants.yts).^((4.0-1)/4.0 - 2.0/3.0);
+	% calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
+	disp('Converting B for n=4');
+	B4 = B3.*(strainrate.eff/md.constants.yts).^((4.0-1)/4.0 - 2.0/3.0);
 
-   % update with new parameters for n for all ice vertices
-   ind=gradN>prctile(gradN,99); % target the most positive values of gradient (higher than 99th percentile)
-   md.materials.rheology_B(ind)=B4(ind); % update B only for the target elements
-   md.materials.rheology_n(ind)=4; % set n=4 for the target elements
-	
+	% update with new parameters for n for all ice vertices
+	ind=gradN>prctile(gradN,99); % target the most positive values of gradient (higher than 99th percentile)
+	md.materials.rheology_B(ind)=B4(ind); % update B only for the target elements
+	md.materials.rheology_n(ind)=4; % set n=4 for the target elements
+
 	% run for 20 years
 	md.settings.output_frequency=10;
 	md.timestepping=timesteppingadaptive();
@@ -670,12 +645,12 @@ if perform(org,'PerturbN_gradmax'), % {{{
 	md.timestepping.final_time=15;
 
 	% SOLVE
-   md.miscellaneous.name = org.steps(org.currentstep).string;
-   md.cluster = cluster;
-   loadonly=0;
-   md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
+	md.miscellaneous.name = org.steps(org.currentstep).string;
+	md.cluster = cluster;
+	loadonly=0;
+	md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
 
-   savemodel(org,md);
+	savemodel(org,md);
 
 	t=cell2mat({md.results.TransientSolution.time});
 	vaf=cell2mat({md.results.TransientSolution.IceVolumeAboveFloatation});
@@ -686,19 +661,19 @@ if perform(org,'PerturbN_gradmin_1'), % {{{
 	gradN=getfield(load('Models/gradient.mat'),'gradient');
 
 	% extract B from the existing model (calculated for n=3)
-   B3 = md.materials.rheology_B;
-   % calculate effective strain rate from the MODELED velocities, do NOT average over the elements
-   [strainrate] = strainrate_SSA(md,md.results.StressbalanceSolution.Vx, md.results.StressbalanceSolution.Vy,0);
+	B3 = md.materials.rheology_B;
+	% calculate effective strain rate from the MODELED velocities, do NOT average over the elements
+	[strainrate] = strainrate_SSA(md,md.results.StressbalanceSolution.Vx, md.results.StressbalanceSolution.Vy,0);
 
-   % calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
-   disp('Converting B for n=4');
-   B4 = B3.*(strainrate.eff/md.constants.yts).^((4.0-1)/4.0 - 2.0/3.0);
+	% calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
+	disp('Converting B for n=4');
+	B4 = B3.*(strainrate.eff/md.constants.yts).^((4.0-1)/4.0 - 2.0/3.0);
 
-   % update with new parameters for n for all ice vertices
-   ind=find(gradN==min(gradN)); % target the element with the most negative gradient
-   md.materials.rheology_B(ind)=B4(ind); % update B only for the target element
-   md.materials.rheology_n(ind)=4; % set n=4 for the target element
-	
+	% update with new parameters for n for all ice vertices
+	ind=find(gradN==min(gradN)); % target the element with the most negative gradient
+	md.materials.rheology_B(ind)=B4(ind); % update B only for the target element
+	md.materials.rheology_n(ind)=4; % set n=4 for the target element
+
 	% run for 20 years
 	md.settings.output_frequency=10;
 	md.timestepping=timesteppingadaptive();
@@ -708,12 +683,12 @@ if perform(org,'PerturbN_gradmin_1'), % {{{
 	md.timestepping.final_time=15;
 
 	% SOLVE
-   md.miscellaneous.name = org.steps(org.currentstep).string;
-   md.cluster = cluster;
-   loadonly=0;
-   md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
+	md.miscellaneous.name = org.steps(org.currentstep).string;
+	md.cluster = cluster;
+	loadonly=0;
+	md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
 
-   savemodel(org,md);
+	savemodel(org,md);
 
 	tmin1=cell2mat({md.results.TransientSolution.time});
 	vafmin1=cell2mat({md.results.TransientSolution.IceVolumeAboveFloatation});
@@ -724,19 +699,19 @@ if perform(org,'PerturbN_gradmax_1'), % {{{
 	gradN=getfield(load('Models/gradient.mat'),'gradient');
 
 	% extract B from the existing model (calculated for n=3)
-   B3 = md.materials.rheology_B;
-   % calculate effective strain rate from the MODELED velocities, do NOT average over the elements
-   [strainrate] = strainrate_SSA(md,md.results.StressbalanceSolution.Vx, md.results.StressbalanceSolution.Vy,0);
+	B3 = md.materials.rheology_B;
+	% calculate effective strain rate from the MODELED velocities, do NOT average over the elements
+	[strainrate] = strainrate_SSA(md,md.results.StressbalanceSolution.Vx, md.results.StressbalanceSolution.Vy,0);
 
-   % calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
-   disp('Converting B for n=4');
-   B4 = B3.*(strainrate.eff/md.constants.yts).^((4.0-1)/4.0 - 2.0/3.0);
+	% calculate approximation for B, where mu(3) = mu(n), ie B3/eps_e^(2/3) = Bn/eps_e^((n-1)/n)
+	disp('Converting B for n=4');
+	B4 = B3.*(strainrate.eff/md.constants.yts).^((4.0-1)/4.0 - 2.0/3.0);
 
-   % update with new parameters for n for all ice vertices
-   ind=find(gradN==max(gradN)); % target the element with the most positive gradient
-   md.materials.rheology_B(ind)=B4(ind); % update B only for the target element
-   md.materials.rheology_n(ind)=4; % set n=4 for the target element
-	
+	% update with new parameters for n for all ice vertices
+	ind=find(gradN==max(gradN)); % target the element with the most positive gradient
+	md.materials.rheology_B(ind)=B4(ind); % update B only for the target element
+	md.materials.rheology_n(ind)=4; % set n=4 for the target element
+
 	% run for 20 years
 	md.settings.output_frequency=10;
 	md.timestepping=timesteppingadaptive();
@@ -746,12 +721,12 @@ if perform(org,'PerturbN_gradmax_1'), % {{{
 	md.timestepping.final_time=15;
 
 	% SOLVE
-   md.miscellaneous.name = org.steps(org.currentstep).string;
-   md.cluster = cluster;
-   loadonly=0;
-   md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
+	md.miscellaneous.name = org.steps(org.currentstep).string;
+	md.cluster = cluster;
+	loadonly=0;
+	md=solve(md,'tr','runtimename',0,'loadonly',loadonly);
 
-   savemodel(org,md);
+	savemodel(org,md);
 
 	tmax1=cell2mat({md.results.TransientSolution.time});
 	vafmax1=cell2mat({md.results.TransientSolution.IceVolumeAboveFloatation});
@@ -767,54 +742,26 @@ if perform(org,'PlotPerturbN'), % {{{
 	t0=cell2mat({md.results.TransientSolution.time});
 	vaf0=cell2mat({md.results.TransientSolution.IceVolumeAboveFloatation});
 	tmin=cell2mat({minmd.results.TransientSolution.time});
-   tmax=cell2mat({maxmd.results.TransientSolution.time});
+	tmax=cell2mat({maxmd.results.TransientSolution.time});
 	vafmin=cell2mat({minmd.results.TransientSolution.IceVolumeAboveFloatation});
 	vafmax=cell2mat({maxmd.results.TransientSolution.IceVolumeAboveFloatation});
 	tmin1=cell2mat({min1md.results.TransientSolution.time});
-   vafmin1=cell2mat({min1md.results.TransientSolution.IceVolumeAboveFloatation});
+	vafmin1=cell2mat({min1md.results.TransientSolution.IceVolumeAboveFloatation});
 	tmax1=cell2mat({max1md.results.TransientSolution.time});
-   vafmax1=cell2mat({max1md.results.TransientSolution.IceVolumeAboveFloatation});
+	vafmax1=cell2mat({max1md.results.TransientSolution.IceVolumeAboveFloatation});
 
-   figure(1); clf; hold on;
-	
+	figure(1); clf; hold on;
+
 	%plot(t0,vaf0-vaf0(1),'linewidth',2,'k')
 	vaf0=vaf0-vaf0(1);
-   plot(tmin,vafmin-vafmin(1)-vaf0,'linewidth',2);
-   plot(tmax,vafmax-vafmax(1)-vaf0,'linewidth',2);
-   plot(tmin1,vafmin1-vafmin1(1)-vaf0,'linewidth',2);
-   plot(tmax1,vafmax1-vafmax1(1)-vaf0,'linewidth',2);
+	plot(tmin,vafmin-vafmin(1)-vaf0,'linewidth',2);
+	plot(tmax,vafmax-vafmax(1)-vaf0,'linewidth',2);
+	plot(tmin1,vafmin1-vafmin1(1)-vaf0,'linewidth',2);
+	plot(tmax1,vafmax1-vafmax1(1)-vaf0,'linewidth',2);
 	legend('<1% neg. gradient','>99% pos. gradient',...
 		'min grad element','max grad element','location','northwest');
 	xlabel('years');
 	ylabel('VAF anomaly (compared to n=3) (m^3)'); % m^3
 
-	
+
 end % }}}
-
-%Local functions
-function fric=EstimateFric_Budd(md) % {{{
-
-   disp('Estimating friction coefficient - Budd')
-   % initial guess from driving stress
-   min_velocity=0.1; % m/yr
-   min_pressure=1.;% Pa
-   min_c=1;
-
-   asurf=averaging(md,md.geometry.surface,20); % maybe executing 20 L2 projection is ok
-   [sx,sy,s]=slope(md,asurf); % slope 's' comes on elements
-   sslope=averaging(md,s,1); % average the slope once on the vertices, because 's' comes on elements, we need this data on vertices
-
-   vel=md.inversion.vel_obs;
-   vel=max(vel,min_velocity); % setting minimum velocity value
-   vel=vel/md.constants.yts; % S.I.
-
-   Neff=(md.materials.rho_ice*md.geometry.thickness+md.materials.rho_water*md.geometry.base)*md.constants.g;
-   Neff(find(Neff<=0))=min_pressure; % setting minimum positve pressure
-
-   driving_stress=md.materials.rho_ice*md.constants.g*md.geometry.thickness.*(sslope);
-   c=sqrt(driving_stress./(Neff.*vel));
-   c=max(c,min_c);
-
-   fric=c; % initial guess
-
-end%}}}
