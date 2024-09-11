@@ -1,0 +1,8 @@
+# ignore files of the following types
+    *.eps
+	 *.tif
+	 *.pdf
+	 *.png
+	 *.gif
+	 *.svg
+	 *.mat
