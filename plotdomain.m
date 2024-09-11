@@ -44,9 +44,9 @@ if loaddata % {{{
 	end
 	xshelf=IBCSO_shelfbreakline.X(1:end-1);
 	yshelf=IBCSO_shelfbreakline.Y(1:end-1);
-	save('domainplot','xExp','yExp','x1','y1','x2','y2','xrock','yrock','xshelf','yshelf');
+	save('./mat/domainplot.mat','xExp','yExp','x1','y1','x2','y2','xrock','yrock','xshelf','yshelf');
 else
-	load('domainplot')
+	load('./mat/domainplot.mat')
 end
 % }}}
 

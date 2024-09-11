@@ -18,7 +18,7 @@ str = {'MIROC-ESM-CHEM','NorESM1-M','HadGEM2-ES','CSIRO-Mk3-6-0','IPSL-CM5A-MR',
 
 readfrommodel=0;
 % read in data {{{
-datafname='./nThwaites.mat';
+datafname='./mat/nThwaites.mat';
 t={};v={};gt={}; % initialize blank cell arrays
 if readfrommodel==1
 	fname_prefix='./Models/Amundsen_';

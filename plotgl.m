@@ -5,7 +5,7 @@
 readfrommodel=0;
 readfromfile=0;
 % read in data {{{
-datafname='./oceanlevelsetresults.mat';
+datafname='./mat/oceanlevelsetresults.mat';
 if readfrommodel
 	t={};oceanlevelsets={}; % initialize blank cell arrays
 	ismip_models={'miroc','noresm','hadgem','csiro','ipsl','ccsm'};
