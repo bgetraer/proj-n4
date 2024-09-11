@@ -559,6 +559,53 @@ if perform(org,'PickupTransient'), % {{{
 	% save model
 	savemodel(org,md);
 end % }}}
+if perform(org,'AutoDiffN'), % {{{
+	warning('This code has been moved to this file from another computer. Some testing and debugging may be necessary');
+	disp('   -- Loading model');
+	md = loadmodel('./Models/Amundsen_n3_ccsm85_TransientRun.mat');
+
+   md.toolkits.DefaultAnalysis=issmmumpssolver();
+   md.toolkits.RecoveryAnalysis=issmmumpssolver();
+   md.autodiff.driver='fos_reverse';
+   md.autodiff.isautodiff=true;
+
+   disp('CANNOT LEAVE NaNs in parameters or AD will kill you!');
+   md.stressbalance.restol=0.0001; % default
+   md.stressbalance.abstol=10; % default
+
+   md.autodiff.dependents={...
+      dependent('name','IceVolumeAboveFloatation','type','scalar')
+   };
+
+   field = md.materials.rheology_n; name = 'MaterialsRheologyN';
+   md.autodiff.independents{1} = independent('name',name,'type','element',... %Really needed??
+      'control_size',size(field,2),...
+      'min_parameters',0.999*field,...
+      'max_parameters',1.001*field,...
+      'control_scaling_factor',1);
+   md.inversion=adm1qn3inversion(md.inversion);
+   md.inversion.iscontrol=1;
+   md.inversion.maxiter=1;
+   md.inversion.maxsteps=md.inversion.maxiter;
+   md.inversion.dxmin=1e-5;
+   md.autodiff.isautodiff=1;
+   md.autodiff.driver='fos_reverse';
+   md.verbose.convergence=0;
+   md.settings.checkpoint_frequency = 8;
+
+   %md.settings.checkpoint_frequency = 0;
+   md.timestepping.final_time=2028; %15 years
+   md.transient.requested_outputs = {'default','Bed','MaskOceanLevelset',...
+      'IceMaskNodeActivation','MaskIceLevelset','GroundedArea','IceVolumeAboveFloatation','IceVolume','BasalforcingsFloatingiceMeltingRate','Vel'};
+
+   md.cluster = cluster;
+   md.cluster.interactive = 0;
+   md.settings.waitonlock = 0;
+   md.stressbalance.maxiter=8;
+   md=solve(md,'Transient','runtimename',false,'loadonly',1);
+
+   savemodel(org,md);
+end % }}}
 
 % OTHER TESTING 
 if perform(org,'PerturbN_baseline'), % {{{
