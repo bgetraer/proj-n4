@@ -1,17 +1,18 @@
 
-loaddata=0;
-if loaddata % {{{
-	disp('loading domain data')
-
-	% BedMachine data	
 	xLim = [-2E6, -1E6];
 	yLim = [-1E6,0.2E6];
 	x=linspace(xLim(1),xLim(2),5E3);
 	y=linspace(yLim(1),yLim(2),5E3);
 	[X Y]=meshgrid(x,y);
+
+	% BedMachine data	
 	bed = interpBedmachineAntarctica(X,Y,'bed');
 	mask = interpBedmachineAntarctica(X,Y,'mask');
 	rock = mask==1;
+loaddata=0;
+if loaddata % {{{
+	disp('loading domain data')
+
 
 	% outline of ice domain in x (m)
 	xExp=[-1669315.4719493026,-1669315.4719493026,-1193987.0047960179,...
@@ -74,7 +75,8 @@ h_shelf=plot([nan nan nan],[nan nan nan],'--k','linewidth',0.75);
 
 axis equal
 set([ax1,ax2],'xlim',xLim,'ylim',yLim)
-set(ax2,'yticklabel',get(gca,'ytick')*1E-3,'xticklabel',get(gca,'xtick')*1E-3,'fontsize',18)
+set(ax2,'fontsize',18)
+set(ax2,'yticklabel',get(ax2,'ytick')*1E-3,'xticklabel',get(ax2,'xtick')*1E-3)
 xlabel('x (km)');
 ylabel('y (km)');
 
