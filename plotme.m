@@ -48,7 +48,7 @@ else
 	load(datafname);
 end% }}}
 
-fignum=5;
+fignum=2;
 nmodels=length(ismip_models); % number of ISMIP models
 fontname='Noto Mono';
 switch fignum
@@ -178,8 +178,11 @@ switch fignum
 		%   h{i}=plot(t_q,diffn4(j,:),'-','color',colors(i,:),'linewidth',2);
 		%   str{i}=ismip_models{j};
 		%end
-		hrng=plot(t_q,range(gt_q3),'r-','linewidth',2);
-		hstd=plot(t_q,std(gt_q3),'r--','linewidth',2);
+		hrng4=plot(t_q,range(gt_q4),'b-','linewidth',2);
+      hstd4=plot(t_q,std(gt_q4),'b--','linewidth',2);
+		hrng3=plot(t_q,range(gt_q3),'r-','linewidth',2);
+		hstd3=plot(t_q,std(gt_q3),'r--','linewidth',2);
+
 
 		hmax=plot(t_q,max(diffn4),'k-','linewidth',2);
 		hmean=plot(t_q,mean(diffn4),'k--','linewidth',2);
@@ -196,20 +199,22 @@ switch fignum
 		ylimleft=[0 100E3];
 		ylim(ylimleft);
 		xlabel('time (yr)');
-		ylabel('Mass above flotation (10^3 Gt)');
+		ylabel('Spread in mass above flotation (10^3 Gt)');
 		set(gca,'YTickLabel',get(gca,'YTick')*1E-3,'YColor',[0,0,0],'fontsize',12);
 		yyaxis right
 		ylimright=ylimleft.*gt2mmslr;
 		ytickright=ylimleft(1):20:ylimleft(2);
 		set(gca,'YTick',ytickright,'Ylim',ylimright,'YColor',[0,0,0]);
 		set(gca,'YTickLabel',abs(get(gca,'YTick')));
-		ylabel('Sea level equivalent (mm)');
+		ylabel('Spread in sea level equivalent (mm)');
 		set(gca, 'Layer', 'top');
 		% }}}
 		% legend --------------------------------- {{{
-		legend([hrng,hstd,hmax,hmean],{'range of n=3 models','std of n=3 models',...
+		legend([hrng3,hstd3,hrng4,hstd4,hmax,hmean],...
+			{'range of n=3 models','std of n=3 models',...
+			'range of n=4 models','std of n=4 models',...
 			'max abs diff between n=3 and n=4','mean abs diff between n=3 and n=4'},...
-			'location','nw','fontname',fontname);
+			'location','nw','fontname',fontname,'NumColumns',2);
 		% }}}
 		% subaxes {{{
 		ax2= axes('position',[0.175 0.31 0.35 0.4],'color',bgcolor);
@@ -231,6 +236,8 @@ switch fignum
 		end
 		% }}}
 		% plot data ------------------------------ {{{
+		hrng=plot(t_q(t_q<=2100),range(gt_q4(:,t_q<=2100)),'b-','linewidth',2);
+      hstd=plot(t_q(t_q<=2100),std(gt_q4(:,t_q<=2100)),'b--','linewidth',2);
 		hrng=plot(t_q(t_q<=2100),range(gt_q3(:,t_q<=2100)),'r-','linewidth',2);
 		hstd=plot(t_q(t_q<=2100),std(gt_q3(:,t_q<=2100)),'r--','linewidth',2);
 
