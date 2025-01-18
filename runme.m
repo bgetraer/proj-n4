@@ -1,12 +1,13 @@
 % Generate models of Amundsen Sea Embayment with variable n and different ISMIP6 forcing models for comparison
 %    originating from a course project for Dartmouth EARS107 (Fall 2022).
 %
-%    A single model is initialized using the n=3 assumptions to invert for B element-wise. After inverting for B and C,
-% the stress balance is solved to generate the initial model velocity field. We then diverge the models being tested, 
-% converting the B values for n=4 such that the initial model velocity and viscocity fields are EXACTLY the same between 
-% the different models. 
-%    By default, atmospheric forcing is taken from RACMO and melting rates from Rignot et al. If ``useISMIP6'' is turned on,
-% these forcings are replaced by interpolations of the chosen ISMIP6 model. 
+% A single model is initialized using n=3 invert for B element-wise. After inverting for B and C, the stress 
+% balance is solved to generate the initial model velocity field. We then diverge the models being tested, 
+% converting the B values for n=4 such that the initial model velocity and viscocity fields are EXACTLY the 
+% same between the different models. 
+% 
+% Forcing Options: By default, atmospheric forcing is taken from RACMO and melting rates from Rignot et al. 
+% If ``useISMIP6'' is turned on, these forcings are replaced by interpolations of the chosen ISMIP6 model.
 
 % SEE ALSO interpISMIP6AntarcticaOcn,  interpISMIP6AntarcticaSMB
 % Last Edited: 1/25/2024
@@ -47,7 +48,7 @@ end
 % }}}
 
 % cluster parameters{{{
-cluster=generic('name',oshostname(),'np',45); %for totten 45 ideal
+cluster=generic('name',oshostname(),'np',45); % for totten 45 ideal
 %}}}
 % model naming scheme{{{ 
 prefix_initial = 'Amundsen_'; %ie 'Amundsen_Mesh.mat'
@@ -55,24 +56,104 @@ prefix_n = [prefix_initial 'n' num2str(rheology_n) '_']; %ie 'Amundsen_n4_Transi
 prefix_trans = [prefix_n ISMIP6model.prefix];
 %}}}
 
+% data filepaths {{{
+% Rignot, E., Mouginot, J. & Scheuchl, B. (2017). MEaSUREs InSAR-Based Antarctica Ice Velocity Map. 
+%		(NSIDC-0484, Version 2). [Data Set]. Boulder, Colorado USA. NASA National Snow and Ice Data 
+%		Center Distributed Active Archive Center. https://doi.org/10.5067/D7GK8F5J8M8R.
+% How to download:
+% 1) requires NASA Earthdata account, see: https://urs.earthdata.nasa.gov/users/new
+% 2) file url: https://n5eil01u.ecs.nsidc.org/MEASURES/NSIDC-0484.002/1996.01.01/antarctica_ice_velocity_450m_v2.nc
+% 3) example download with wget: wget <url> --directory-prefix=./Data/ --http-user=<uid> --ask-password
+MEaSUREsAntVel_filepath = './Data/antarctica_ice_velocity_450m_v2.nc';
+
+% Morlighem, M. (2022). MEaSUREs BedMachine Antarctica. (NSIDC-0756, Version 3). [Data Set].
+%		Boulder, Colorado USA. NASA National Snow and Ice Data Center Distributed Active Archive
+%		Center. https://doi.org/10.5067/FPSU0V1MWUB6.
+% How to download:
+% 1) requires NASA Earthdata account, see: https://urs.earthdata.nasa.gov/users/new
+% 2) file url: https://n5eil01u.ecs.nsidc.org/MEASURES/NSIDC-0756.003/1970.01.01/BedMachineAntarctica-v3.nc
+% 3) example download with wget: wget <url> --directory-prefix=./Data/ --http-user=<uid> --ask-password
+BedMachineAnt_filepath = 'BedMachineAntarctica-v3.nc';
+
+% Nowicki, S., Simon, E., & ISMIP6 Team. (2021). ISMIP6 21st Century Forcing Datasets (Ghub-4743) [Data Set]. 
+%		The Ghub. https://doi.org/10.5281/zenodo.11176009
+% How to download:
+% 1) requires login to globus.org, see: https://app.globus.org/login
+% 2) requires installation of globus CLI, see: https://docs.globus.org/cli/
+%		Example using pip:
+%		i) pip install globus-cli
+%    ii) globus login
+% 3) requires installation of and setup of Globus Connect Personal
+%		i) wget https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz -P temp
+%	  ii) cd temp
+%	 iii) tar xzf globusconnectpersonal-latest.tgz
+%    iv) cd globusconnectpersonal-x.y.z
+%	   v) ./globusconnectpersonal -setup --no-gui
+%	  vi) ./globusconnectpersonal -start &
+% 4) transfer files from Globus collection endpoint to local endpoint 
+%		i) export Local_COLLECTION_ID=$($(echo /home/bgetraer/.local/bin/globus endpoint local-id))
+%    ii) export GHub_ISMIP6_Forcing_COLLECTION_ID="ad1a6ed8-4de0-4490-93a9-8258931766c7"
+%	 iii) globus transfer $GHub_ISMIP6_Forcing_COLLECTION_ID:/AIS/ $Local_COLLECTION_ID:~/path-to-data
+% note: $GHub_ISMIP6_Forcing_COLLECTION_ID:/AIS/ contains all of the AIS data, and is ~1.7TB. To download the minimum necessary:
+% 5)
+% /AIS/Atmosphere_Forcing/CESM2_ssp585/
+% /AIS/Atmosphere_Forcing/CNRM_CM6_ssp585/
+% /AIS/Atmosphere_Forcing/CNRM_ESM2_ssp585/
+% /AIS/Atmosphere_Forcing/CSIRO-Mk3-6-0_rcp85/
+% /AIS/Atmosphere_Forcing/HadGEM2-ES_rcp85/
+% /AIS/Atmosphere_Forcing/IPSL-CM5A-MR_rcp85/
+% /AIS/Atmosphere_Forcing/ccsm4_rcp8.5/
+% /AIS/Atmosphere_Forcing/miroc-esm-chem_rcp8.5/
+% /AIS/Atmosphere_Forcing/noresm1-m_rcp8.5/
+%
+% /AIS/Ocean_Forcing/CESM2_ssp585/
+% /AIS/Ocean_Forcing/CNRM_CM6_ssp585/
+% /AIS/Ocean_Forcing/CNRM_ESM2_ssp585/
+% /AIS/Ocean_Forcing/CSIRO-Mk3-6-0_rcp85/
+% /AIS/Ocean_Forcing/HadGEM2-ES_rcp85/
+% /AIS/Ocean_Forcing/IPSL-CM5A-MR_rcp85/
+% /AIS/Ocean_Forcing/ccsm4_rcp8.5/
+% /AIS/Ocean_Forcing/miroc-esm-chem_rcp8.5/
+% /AIS/Ocean_Forcing/noresm1-m_rcp8.5/
+% }}}
+
 org=organizer('repository',['./Models'],'prefix',prefix_initial,'steps',steps); clear steps;
 addpath([getenv('JPL_DIR') '/proj-morlighem/CODE/']);
 addpath('./m/');
 
 %Model initialization
 if perform(org,'Mesh'),% {{{
-	coarse = 15e3; % coarse areas of the mesh
-	fine_vel =1500; % fine areas of the mesh 
+	% Initialize new model structure
+	md = model();
 
-	md=triangle(model,'./Exp/ThwaitesPIGDomain2.exp',5e3); % generate initial triangular mesh
+	% Define domain outline coordinates and create ARGUS file
+   EXP = struct(); % initialize structure for coordinates
+   % outline coordinates of domain in x (m)
+   EXP.x = [-1669315.4719493026,-1669315.4719493026,-1193987.0047960179,...
+     -1026979.7055259449,-1026979.7055259449,-1556906.7128252152,...
+     -1772089.1945770399,-1772089.1945770399,-1669315.4719493026];
+   % outline coordinates of domain in y (m)
+   EXP.y = [-420940.0927398402,-829553.2314259715,-829553.2314259715,...
+     -530867.1000391102,-58750.3117179424,170008.8123696489,...
+     70446.7685740285,-420940.0927398402,-420940.0927398402];
+   % write to ARGUS file
+	expfile = 'Exp/domain.exp';
+	expwrite(EXP,expfile);
 
-	% Adapt mesh to initial observed velocities
+	% lengthscales for spatial resolution
+	hinit=1000; % initial edge length (m)
+	hmin=1500; % min edge length (m)
+   hmax=15e3; % max edge length (m)
+
+	% Generate initial triangular mesh
+	md = triangle(md,expfile,hinit);
+
+	% Adaptively refine mesh to initial observed velocities
 	nsteps = 2; % number of mesh adaptation steps
-	for i=1:nsteps, 
+	for i=1:nsteps
 		disp(['--- Performing static mesh adaptation. Step ' num2str(i) '/' num2str(nsteps)]);
-		% using a priori analysis (observed velocity)
 		disp('   -- Interpolating some data');
-		[velx vely] = interpMouginotAnt2017(md.mesh.x,md.mesh.y);
+		[velx vely] = interpMEaSUREsAntVel(md.mesh.x,md.mesh.y); % interpolate observed velocities (nominal year 2013) (m/yr)
 		surface=interpBedmachineAntarctica(md.mesh.x,md.mesh.y,'surface');
 		ocean_levelset=-ones(size(md.mesh.x));% all floating
 		ocean_levelset(find(interpBedmachineAntarctica(md.mesh.x,md.mesh.y,'mask')==2))=1; % grounded from BedMachine
@@ -83,19 +164,37 @@ if perform(org,'Mesh'),% {{{
 		velx(pos)=0; vely(pos)=0; vel=sqrt(velx.^2+vely.^2);
 
 		hVertices = NaN(md.mesh.numberofvertices,1);
-		hVertices(find(vel>200)) = fine_vel;
+		hVertices(find(vel>200)) = hmin;
 		md=bamg(md,'gradation',1.6180,'anisomax',1.e6,'KeepVertices',0,'Hessiantype',0,'Metrictype',0,...
-			'hmax',coarse,'hmin',fine_vel,'hVertices',hVertices,'field',vel,'err',3);
+			'hmax',hmax,'hmin',hmin,'hVertices',hVertices,'field',vel,'err',3);
 
 		md.private.bamg=struct();
 	end
 
-	% mesh projection information
-	[md.mesh.lat,md.mesh.long]=xy2ll(md.mesh.x,md.mesh.y,-1);
-	md.mesh.epsg=3031;
-	md.mesh.scale_factor=(1+sin(md.mesh.lat*pi/180))/(1+sin(-71*pi/180));
-	md.miscellaneous.name='mesh';
+	for i=1:nsteps,
+      disp(['--- Performing static mesh adaptation. Step ' num2str(i) '/' num2str(nsteps)]);
+      % using a priori analysis (observed velocity)
+      disp('   -- Interpolating some data');
+      [velx vely] = interpMouginotAnt2017(md.mesh.x,md.mesh.y); % interpolate observed velocities (nominal year 2013) (m/yr)
+      ocean_levelset=-ones(size(md.mesh.x)); % all floating
+      ocean_levelset(find(interpBedmachineAntarctica(md.mesh.x,md.mesh.y,'mask','linear',...
+         '/totten_1/ModelData/Antarctica/BedMachine/BedMachineAntarctica-v4.0.nc')==2))=1; % set grounded ice from BedMachine
+      ice_levelset=-ones(size(md.mesh.x)); % all ice
+      ice_levelset(find(interpBedmachineAntarctica(md.mesh.x,md.mesh.y,'mask','linear',...
+         '/totten_1/ModelData/Antarctica/BedMachine/BedMachineAntarctica-v4.0.nc')==0))=1; % set no ice from BedMachine
 
+      pos=find(isnan(velx) | isnan(vely) | ice_levelset>0); % replace no ice areas with zero velocity
+      velx(pos)=0; vely(pos)=0; vel=sqrt(velx.^2+vely.^2);
+
+      hVertices = NaN(md.mesh.numberofvertices,1);
+      hVertices(find(vel>200)) = hmin;
+
+      md=bamg(md,'gradation',1.6180,'anisomax',1.e6,'KeepVertices',0,'Hessiantype',0,'Metrictype',0,...
+         'hmax',hmax,'hmin',hmin,'hVertices',hVertices,'field',vel,'err',3);
+   end
+
+	% add name and save
+	md.miscellaneous.name='mesh';
 	savemodel(org,md);
 end %}}}
 if perform(org,'Param'),% {{{
